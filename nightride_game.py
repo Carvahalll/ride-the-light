@@ -154,7 +154,7 @@ def draw_scene(surf, cam_x, road_offset, gt):
             g2 = int(NEON_PURPLE[1] * brightness / 55)
             b2 = int(NEON_PURPLE[2] * brightness / 55)
             pygame.draw.line(surf, (r2, g2, b2), (lx, sy2), (rx, sy2),
-                             max(1, int(3 * (1 - z))))
+                             max(2, int(6 * (1 - z))))
         z += stripe_z_step
 
     # 3. Lane dashes — plain lines, sampled coarsely
@@ -172,7 +172,7 @@ def draw_scene(surf, cam_x, road_offset, gt):
                 c = (int(NEON_PURPLE[0] * bright / 140),
                      int(NEON_PURPLE[1] * bright / 140),
                      int(NEON_PURPLE[2] * bright / 140))
-                thick = max(1, int(2 * (1 - z2)))
+                thick = max(2, int(4 * (1 - z2)))
                 pygame.draw.line(surf, c, prev, pt, thick)
             prev = pt
 
@@ -187,7 +187,7 @@ def draw_scene(surf, cam_x, road_offset, gt):
             if prev:
                 bright = int(255 * (1 - z2))
                 c = (0, bright, bright)
-                thick = max(1, int(5 * (1 - z2)))
+                thick = max(2, int(10 * (1 - z2)))
                 pygame.draw.line(surf, c, prev, pt, thick)
             prev = pt
 
@@ -251,7 +251,7 @@ class RoadObject:
                 wr = pygame.Rect(r.x + pw // 5, r.y + ph // 8,
                                  pw * 3 // 5, ph // 3)
                 pygame.draw.rect(surf, C_BG, wr, border_radius=2)
-                pygame.draw.rect(surf, color, wr, max(1, int(2 * scale)),
+                pygame.draw.rect(surf, color, wr, max(2, int(4 * scale)),
                                  border_radius=2)
             # Headlights
             if pw > 12:
@@ -268,7 +268,7 @@ class RoadObject:
             if spin_w > 4:
                 e_rect = pygame.Rect(int(sx) - spin_w // 2, int(sy) - cr,
                                      spin_w, cr * 2)
-                pygame.draw.ellipse(surf, (170, 130, 0), e_rect, max(1, int(3 * scale)))
+                pygame.draw.ellipse(surf, (170, 130, 0), e_rect, max(2, int(6 * scale)))
 
 # ── Sparks ────────────────────────────────────────────────────────────────────
 
@@ -298,13 +298,12 @@ class Spark:
 # ── HUD ───────────────────────────────────────────────────────────────────────
 
 def draw_hud(surf, score, speed, combo, player_lane, cam_x, font_big, font_small, font_tiny):
-    # Score centre top
+    # Score — top left
     sc_str  = f"{score:,}"
     shadow  = font_big.render(sc_str, True, (0, 55, 20))
     sc_surf = font_big.render(sc_str, True, NEON_GREEN)
-    cx      = W // 2 - sc_surf.get_width() // 2
-    surf.blit(shadow,  (cx + 3, 15))
-    surf.blit(sc_surf, (cx,     12))
+    surf.blit(shadow,  (31, 15))
+    surf.blit(sc_surf, (28, 12))
 
     # Speed — top right
     surf.blit(font_tiny.render("KM/H",              True, (90, 60, 150)), (W - 215, 14))
@@ -319,13 +318,13 @@ def draw_hud(surf, score, speed, combo, player_lane, cam_x, font_big, font_small
         pygame.draw.rect(surf, NEON_PURPLE2, pygame.Rect(W - 215, 78, bar_w, 13),
                          border_radius=4)
 
-    # Combo — top left
+    # Combo — below the score on the left
     if combo > 1:
         t  = min(combo, 8) / 8
         cc = (int(NEON_YELLOW[0]*t + NEON_GREEN[0]*(1-t)),
               int(NEON_YELLOW[1]*t + NEON_GREEN[1]*(1-t)),
               int(NEON_YELLOW[2]*t + NEON_GREEN[2]*(1-t)))
-        surf.blit(font_small.render(f"x{combo}  COMBO", True, cc), (28, 38))
+        surf.blit(font_small.render(f"x{combo}  COMBO", True, cc), (28, 95))
 
     # ── Hitbox square — matches the actual collision box ───────────────────
     hx        = HITBOX_CX_SCREEN
@@ -336,12 +335,12 @@ def draw_hud(surf, score, speed, combo, player_lane, cam_x, font_big, font_small
     for i in range(4, 0, -1):
         gr = sq_rect.inflate(i * 5, i * 5)
         gc = (0, int(NEON_CYAN[1] * i // 4), int(NEON_CYAN[2] * i // 4))
-        pygame.draw.rect(surf, gc, gr, 2, border_radius=4)
+        pygame.draw.rect(surf, gc, gr, 4, border_radius=4)
     # Solid filled square
     pygame.draw.rect(surf, NEON_CYAN, sq_rect, border_radius=4)
     # Bright white centre cross-hair
-    pygame.draw.line(surf, (255,255,255), (hx - 6, sq_y + sq), (hx + 6, sq_y + sq), 2)
-    pygame.draw.line(surf, (255,255,255), (hx, sq_y + sq - 6), (hx, sq_y + sq + 6), 2)
+    pygame.draw.line(surf, (255,255,255), (hx - 6, sq_y + sq), (hx + 6, sq_y + sq), 4)
+    pygame.draw.line(surf, (255,255,255), (hx, sq_y + sq - 6), (hx, sq_y + sq + 6), 4)
 
 def draw_game_over(surf, score, font_huge, font_big, font_small, t):
     ov = pygame.Surface((W, H))
@@ -368,8 +367,8 @@ def draw_game_over(surf, score, font_huge, font_big, font_small, t):
     for i in range(5):
         a  = max(0, 85 - i * 16)
         c  = (int(NEON_PINK[0]*a//85), int(NEON_PINK[1]*a//85), int(NEON_PINK[2]*a//85))
-        pygame.draw.line(surf, c, (0, cy - 235 + i*3), (W, cy - 235 + i*3), 2)
-        pygame.draw.line(surf, c, (0, cy + 148 - i*3), (W, cy + 148 - i*3), 2)
+        pygame.draw.line(surf, c, (0, cy - 235 + i*3), (W, cy - 235 + i*3), 4)
+        pygame.draw.line(surf, c, (0, cy + 148 - i*3), (W, cy + 148 - i*3), 4)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
