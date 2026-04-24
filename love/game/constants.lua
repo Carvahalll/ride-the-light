@@ -51,6 +51,9 @@ C.COL = {
     ORANGE      = {rgb(255,  80,   0)},
     WHITE       = {rgb(230, 220, 255)},
     RED         = {rgb(255,  10,  60)},
+    LAKE        = {rgb(  0, 140, 160)},
+    AMBER       = {rgb(255, 140,   0)},
+    SNOW        = {rgb(240, 220, 255)},
 }
 
 C.OBS_COLORS = { C.COL.PINK, C.COL.ORANGE, C.COL.RED }

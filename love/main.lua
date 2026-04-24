@@ -4,14 +4,15 @@ local RES_W      = 1920    -- used only when FULLSCREEN = true
 local RES_H      = 1080
 
 -- ── Requires ──────────────────────────────────────────────────────────────────
-local C       = require("game.constants")
-local State   = require("game.state")
-local Road    = require("game.road")
-local Objects = require("game.objects")
-local Sparks  = require("game.sparks")
-local HUD     = require("game.hud")
-local Bloom   = require("game.bloom")
-local Input   = require("input")
+local C          = require("game.constants")
+local State      = require("game.state")
+local Road       = require("game.road")
+local Objects    = require("game.objects")
+local Sparks     = require("game.sparks")
+local HUD        = require("game.hud")
+local Bloom      = require("game.bloom")
+local Background = require("game.background")
+local Input      = require("input")
 
 -- ── Globals ───────────────────────────────────────────────────────────────────
 local s           -- current game state
@@ -49,6 +50,8 @@ end
 function love.update(dt)
     dt = math.min(dt, 0.05)   -- cap to avoid spiral-of-death after focus loss
     s.gt = s.gt + dt
+
+    Background.update(dt)
 
     local steer, restart = Input.poll(s.alive)
 
@@ -93,6 +96,12 @@ function love.update(dt)
         s.objects[#s.objects+1] = Objects.newCoin(s.speed * 0.026)
     end
 
+    s.gate_timer = s.gate_timer + dt
+    if s.gate_timer >= 30 then
+        s.gate_timer = 0
+        s.objects[#s.objects+1] = Objects.newGate(s.speed * 0.018)
+    end
+
     -- Update objects; detect collisions
     local i = 1
     while i <= #s.objects do
@@ -104,7 +113,7 @@ function love.update(dt)
             s.objects[#s.objects] = nil
 
         elseif obj:isHit(s.cam_x) then
-            if obj.kind == 'obstacle' then
+            if obj.kind == 'obstacle' or obj.kind == 'swan' then
                 s.alive = false
                 i = i + 1   -- leave in list so it draws on game-over frame
             else
@@ -129,6 +138,7 @@ function love.draw()
     love.graphics.setCanvas(canvas)
     love.graphics.clear(C.COL.BG[1], C.COL.BG[2], C.COL.BG[3], 1)
 
+    Background.draw(s.cam_x)
     Road.draw(s.cam_x, s.road_offset)
 
     -- Draw objects back-to-front (highest z first = furthest away)

@@ -10,6 +10,7 @@ function State.new()
         speed       = C.INITIAL_SPEED,
         obs_timer   = 0,
         coin_timer  = 0,
+        gate_timer  = 0,
         speed_timer = 0,
         road_offset = 0,
         alive       = true,

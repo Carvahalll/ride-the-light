@@ -60,6 +60,91 @@ local function drawCircleGlow(col, cx, cy, r, passes, spread)
     love.graphics.circle("fill", cx, cy, math.max(1, r/3))
 end
 
+-- ── Swan drawing ──────────────────────────────────────────────────────────────
+
+local function drawSwan(sx, sy, scale, pulse)
+    if scale < 0.04 then return end
+
+    local bw = math.max(4, math.floor(90 * scale))   -- body ellipse x-radius * 2
+    local bh = math.max(3, math.floor(38 * scale))   -- body ellipse y-radius * 2
+    local nr = math.max(2, math.floor(24 * scale))   -- neck length
+    local hr = math.max(2, math.floor(10 * scale))   -- head radius
+    local p  = 0.80 + 0.20 * pulse
+
+    -- body glow
+    for i = 3, 1, -1 do
+        local inf = i * 5 * scale
+        love.graphics.setColor(p, 0.30 * p, 0.70 * p, 0.32 * i / 3)
+        love.graphics.ellipse("fill", sx, sy - bh / 2, bw / 2 + inf, bh / 2 + inf)
+    end
+    love.graphics.setColor(0.94 * p, 0.84 * p, 1.0, 1)
+    love.graphics.ellipse("fill", sx, sy - bh / 2, bw / 2, bh / 2)
+
+    -- neck + head
+    local neck_bx = sx - bw * 0.15
+    local neck_by = sy - bh
+    local nx      = sx - bw * 0.30
+    local ny      = neck_by - nr
+
+    love.graphics.setColor(0.94 * p, 0.84 * p, 1.0, 1)
+    love.graphics.setLineWidth(math.max(1, math.floor(5 * scale)))
+    love.graphics.line(neck_bx, neck_by, nx, ny)
+    love.graphics.setLineWidth(1)
+
+    for i = 2, 1, -1 do
+        love.graphics.setColor(p, 0.30 * p, 0.70 * p, 0.40 * i / 2)
+        love.graphics.circle("fill", nx, ny, hr + i * 4 * scale)
+    end
+    love.graphics.setColor(0.94 * p, 0.84 * p, 1.0, 1)
+    love.graphics.circle("fill", nx, ny, hr)
+end
+
+-- ── Gate (Kapellbrücke) drawing ───────────────────────────────────────────────
+
+local function drawGate(sx_l, sy_l, sx_r, sy_r, scale, col)
+    if scale < 0.015 then return end
+
+    local sy     = (sy_l + sy_r) / 2
+    local road_w = sx_r - sx_l
+    local pw     = math.max(3, math.floor(22 * scale))
+    local ph     = math.floor(scale * C.H * 0.65)
+    local beam_h = math.max(2, math.floor(16 * scale))
+
+    local function glowRect(x, y, w, h)
+        for i = 4, 1, -1 do
+            local inf = i * 6 * scale
+            love.graphics.setColor(col[1], col[2], col[3], 0.14 * i / 4)
+            love.graphics.rectangle("fill", x - inf, y - inf, w + inf * 2, h + inf * 2)
+        end
+        love.graphics.setColor(col[1], col[2], col[3], 1)
+        love.graphics.rectangle("fill", x, y, w, h)
+    end
+
+    glowRect(sx_l - pw / 2, sy - ph,  pw,     ph)
+    glowRect(sx_r - pw / 2, sy - ph,  pw,     ph)
+    glowRect(sx_l,          sy - ph,  road_w, beam_h)
+
+    local apex_x = (sx_l + sx_r) / 2
+    local apex_y = sy - ph - math.floor(50 * scale)
+    love.graphics.setColor(col[1], col[2], col[3], 0.50)
+    love.graphics.polygon("fill", sx_l, sy - ph, apex_x, apex_y, sx_r, sy - ph)
+    love.graphics.setColor(col[1], col[2], col[3], 1)
+    love.graphics.setLineWidth(math.max(1, 2 * scale))
+    love.graphics.polygon("line", sx_l, sy - ph, apex_x, apex_y, sx_r, sy - ph)
+    love.graphics.setLineWidth(1)
+
+    -- Wasserturm (octagonal tower above apex)
+    local tr = math.max(3, math.floor(32 * scale))
+    local tx = apex_x
+    local ty = apex_y - tr * 0.8
+    for i = 4, 1, -1 do
+        love.graphics.setColor(col[1], col[2], col[3], 0.16 * i / 4)
+        love.graphics.circle("fill", tx, ty, tr + i * 6 * scale)
+    end
+    love.graphics.setColor(col[1], col[2], col[3], 1)
+    love.graphics.circle("fill", tx, ty, tr)
+end
+
 -- ── RoadObject ────────────────────────────────────────────────────────────────
 
 local RoadObject = {}
@@ -72,7 +157,11 @@ function RoadObject.new(speed, kind)
     self.speed = speed
     self.kind  = kind
     self.pulse = love.math.random() * math.pi * 2
-    self.color = (kind == 'obstacle') and randcol(C.OBS_COLORS) or C.COL.YELLOW
+    if     kind == 'obstacle' then self.color = randcol(C.OBS_COLORS)
+    elseif kind == 'swan'     then self.color = C.COL.SNOW
+    elseif kind == 'gate'     then self.color = C.COL.AMBER
+    else                           self.color = C.COL.YELLOW  -- coin
+    end
     return self
 end
 
@@ -87,6 +176,7 @@ end
 
 function RoadObject:isHit(cam_x)
     if self.z >= C.OBJ_HIT_Z then return false end
+    if self.kind == 'gate'    then return false end
     local half_w   = C.ROAD_HALF_BOT + (C.ROAD_HALF_TOP - C.ROAD_HALF_BOT) * self.z
     local center_x = C.W / 2 + cam_x * (1.0 - self.z)
     local obj_sx   = center_x + self:laneFrac() * half_w * 2
@@ -131,6 +221,14 @@ function RoadObject:draw(cam_x)
             drawCircleGlow(yl, sx + pw/2 - hl_r - 2, sy - hl_r - 2, hl_r, 3, 4)
         end
 
+    elseif self.kind == 'swan' then
+        drawSwan(sx, sy, scale, math.sin(self.pulse))
+
+    elseif self.kind == 'gate' then
+        local lx, ly = Road.project(-0.5, self.z, cam_x)
+        local rx, ry = Road.project( 0.5, self.z, cam_x)
+        drawGate(lx, ly, rx, ry, scale, col)
+
     else  -- coin
         local cr = nearest(math.floor(32 * scale), COIN_SIZES)
         if cr < 3 then return end
@@ -149,7 +247,12 @@ end
 
 -- ── Module-level spawn helpers ────────────────────────────────────────────────
 
-function Objects.newObstacle(speed) return RoadObject.new(speed, 'obstacle') end
-function Objects.newCoin(speed)     return RoadObject.new(speed, 'coin')     end
+function Objects.newObstacle(speed)
+    -- 30% chance a swan waddles onto the road instead of a car
+    local kind = (love.math.random() < 0.30) and 'swan' or 'obstacle'
+    return RoadObject.new(speed, kind)
+end
+function Objects.newCoin(speed)  return RoadObject.new(speed, 'coin') end
+function Objects.newGate(speed)  return RoadObject.new(speed, 'gate') end
 
 return Objects
