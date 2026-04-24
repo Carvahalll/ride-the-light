@@ -3,7 +3,10 @@
     "allow": [
       "Bash(grep -v \"^$\")",
       "Bash(ghostscript -v)",
-      "Bash(gs -v)"
+      "Bash(gs -v)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git -c http.postBuffer=524288000 push origin main)"
     ]
   }
 }
