@@ -1,0 +1,22 @@
+# Love2D
+*.love
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Conda / Python
+env/
+.conda/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.pyo
+
+# Editor
+.vscode/
+*.swp
+*.swo
