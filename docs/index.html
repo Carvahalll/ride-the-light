@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<!--
+  Night Ride — GitHub Pages landing page
+  Plain HTML/CSS/JS, no frameworks, no build steps.
+
+  To rebuild the game after changing Lua source:
+    npx love.js@11.4.1 -c -t "Night Ride" love/ docs/game/
+  Then commit the updated docs/game/ files.
+  NOTE: the rebuild regenerates docs/game/index.html (love.js default — ignored).
+  Our custom dark shell lives at docs/game/shell.html and is NOT touched by rebuilds.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Night Ride</title>
+  <style>
+    /* ── Reset & custom properties ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #02000a;
+      --cyan:   #00ffff;
+      --pink:   #ff00b4;
+      --purple: #a000ff;
+      --text:   #b0a0d0;
+      --dim:    rgba(176, 160, 208, 0.45);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      min-height: 100vh;
+    }
+
+    /* ── Neon glow helpers ──────────────────────────────────────── */
+    .glow-cyan {
+      text-shadow:
+        0 0  6px var(--cyan),
+        0 0 20px var(--cyan),
+        0 0 45px var(--cyan);
+    }
+    .glow-pink {
+      text-shadow:
+        0 0  6px var(--pink),
+        0 0 18px var(--pink),
+        0 0 38px var(--pink);
+    }
+
+    /* ── Neon divider ───────────────────────────────────────────── */
+    .neon-divider {
+      width: 80%;
+      max-width: 900px;
+      height: 1px;
+      margin: 0 auto;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      box-shadow: 0 0 8px var(--cyan);
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       HERO SECTION
+    ══════════════════════════════════════════════════════════════ */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 60px 40px;
+      position: relative;
+    }
+
+    /* Subtle scanline overlay */
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0, 0, 0, 0.07) 3px,
+        rgba(0, 0, 0, 0.07) 4px
+      );
+      pointer-events: none;
+    }
+
+    .hero-title {
+      font-size: clamp(3rem, 10vw, 8rem);
+      font-weight: bold;
+      letter-spacing: 0.15em;
+      color: var(--cyan);
+      margin-bottom: 0.35em;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(0.9rem, 2.5vw, 1.35rem);
+      color: var(--pink);
+      letter-spacing: 0.25em;
+      margin-bottom: 3rem;
+    }
+
+    .hero-desc {
+      max-width: 660px;
+      line-height: 1.85;
+      font-size: 1rem;
+      color: var(--text);
+    }
+    .hero-desc p + p { margin-top: 1em; }
+
+    .scroll-hint {
+      margin-top: 4rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.25em;
+      color: var(--purple);
+      text-shadow: 0 0 8px var(--purple);
+      animation: pulse 2.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50%       { opacity: 1;   }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       GAME EMBED SECTION  (desktop only)
+    ══════════════════════════════════════════════════════════════ */
+    .game-section {
+      padding: 80px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .game-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.35em;
+      color: var(--purple);
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--purple);
+    }
+
+    .game-frame-wrap {
+      position: relative;
+      line-height: 0; /* kill inline-block gap */
+    }
+
+    /* Neon border glow around the iframe */
+    .game-frame-wrap::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border: 2px solid var(--cyan);
+      box-shadow:
+        0 0 14px var(--cyan),
+        inset 0 0 14px rgba(0, 255, 255, 0.05);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .game-frame {
+      display: block;
+      width: 1280px;
+      height: 720px;
+      border: none;
+      background: #02000a;
+    }
+
+    .game-hint {
+      font-size: 0.75rem;
+      color: var(--dim);
+      letter-spacing: 0.1em;
+      text-align: center;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       MOBILE FALLBACK
+    ══════════════════════════════════════════════════════════════ */
+    .mobile-notice {
+      display: none;
+      padding: 80px 30px;
+      text-align: center;
+    }
+    .mobile-notice h2 {
+      color: var(--pink);
+      font-size: 1.4rem;
+      letter-spacing: 0.1em;
+      margin-bottom: 1rem;
+    }
+    .mobile-notice p {
+      line-height: 1.8;
+      color: var(--text);
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       FOOTER
+    ══════════════════════════════════════════════════════════════ */
+    .site-footer {
+      padding: 40px 20px;
+      text-align: center;
+      font-size: 0.72rem;
+      letter-spacing: 0.15em;
+      color: var(--dim);
+    }
+    .site-footer a { color: var(--cyan); text-decoration: none; }
+    .site-footer a:hover { text-shadow: 0 0 8px var(--cyan); }
+
+    /* ── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .game-section  { display: none; }
+      .mobile-notice { display: block; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     HERO / LANDING SECTION
+     Fill in the TODO blocks below — the rest of the page is done.
+══════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+
+  <h1 class="hero-title glow-cyan">NIGHT RIDE</h1>
+
+  <p class="hero-subtitle glow-pink">Eine interaktive Lichtinstallation auf dem Nextbike</p>
+
+  <div class="hero-desc">
+    <p>Tritt in die Pedale, weiche Hindernissen aus und sammle Punkte. Kannst du den Highscore knacken?</p>
+    <p>Für Gesundheit und Umwelt. Für eine Velostadt Luzern.</p>
+    <p>Aurel und Jonas sind beide in Luzern aufgewachsen. In ihrem Alltag haben sie es oft mit Planung und Ausarbeitung von technischen Details zu tun. Jonas arbeitet in einem Architekturbüro in Zürich, Aurel bei der ABB in der Innovationsabteilung. Nebenberuflich ist Aurel als Lichttechniker im Treibhaus und auf kleineren Festivals engagiert.</p>
+  </div>
+
+  <p class="scroll-hint">↓ &nbsp; PLAY IN BROWSER &nbsp; ↓</p>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     GAME EMBED  (hidden on mobile, see .mobile-notice below)
+══════════════════════════════════════════════════════════════════ -->
+<section class="game-section">
+
+  <p class="game-label">Play in browser</p>
+
+  <div class="game-frame-wrap">
+    <iframe
+      class="game-frame"
+      src="game/shell.html"
+      title="Night Ride — playable demo"
+      allow="autoplay"
+      scrolling="no"
+    ></iframe>
+  </div>
+
+  <p class="game-hint">
+    Click the game to focus &nbsp;·&nbsp;
+    LEFT / RIGHT arrow keys to steer &nbsp;·&nbsp;
+    avoid obstacles &nbsp;·&nbsp;
+    collect coins &nbsp;·&nbsp;
+    SPACE to restart
+  </p>
+
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MOBILE FALLBACK
+══════════════════════════════════════════════════════════════════ -->
+<div class="mobile-notice">
+  <h2>Best Viewed on Desktop</h2>
+  <p>
+    Night Ride uses keyboard controls and renders at 1280&times;720.<br>
+    Open this page on a desktop or laptop to play.
+  </p>
+</div>
+
+<div class="neon-divider"></div>
+
+<footer class="site-footer">
+  Built with <a href="https://love2d.org" target="_blank" rel="noopener">LÖVE</a>
+  &nbsp;·&nbsp;
+  Runs in browser via <a href="https://github.com/Davidobot/love.js" target="_blank" rel="noopener">love.js</a>
+</footer>
+
+</body>
+</html>

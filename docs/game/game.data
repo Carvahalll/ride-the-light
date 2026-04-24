@@ -1,0 +1,847 @@
+function love.conf(t)
+    t.window.title   = "Night Ride"
+    t.window.width   = 1280
+    t.window.height  = 720
+    t.window.vsync   = 1
+    t.window.msaa    = 0   -- we'll do glow via shader, not MSAA
+    t.window.resizable = false
+
+    t.modules.audio   = true
+    t.modules.sound   = true
+    t.modules.physics = false
+    t.modules.touch   = false
+    t.modules.joystick = false
+    t.modules.video   = false
+end
+-- GPU bloom: threshold → half-res downsample → separable Gaussian blur → additive composite.
+-- All heavy lifting happens in shaders; Lua only manages canvas ping-pong.
+
+local Bloom = {}
+
+-- ── Tuning ────────────────────────────────────────────────────────────────────
+local THRESHOLD   = 0.15   -- luminance cutoff; lower = more colours glow
+local BLOOM_MIX   = 1.0    -- additive strength of the bloom overlay
+local BLUR_PASSES = 4      -- more passes = wider, softer halo
+
+-- ── Shader sources ────────────────────────────────────────────────────────────
+
+-- Extract pixels above the luminance threshold (soft roll-off, not hard clip).
+local SRC_THRESHOLD = [[
+extern float threshold;
+vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+    vec4 px  = Texel(tex, tc);
+    float lum = dot(px.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float w   = max(0.0, lum - threshold) / max(lum, 0.0001);
+    return vec4(px.rgb * w, px.a) * color;
+}
+]]
+
+-- 9-tap separable Gaussian.  'direction' is (1/w, 0) or (0, 1/h).
+local SRC_BLUR = [[
+extern vec2 direction;
+vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+    vec4 c = vec4(0.0);
+    c += Texel(tex, tc + direction * -4.0) * 0.0162162162;
+    c += Texel(tex, tc + direction * -3.0) * 0.0540540541;
+    c += Texel(tex, tc + direction * -2.0) * 0.1216216216;
+    c += Texel(tex, tc + direction * -1.0) * 0.1945945946;
+    c += Texel(tex, tc                   ) * 0.2270270270;
+    c += Texel(tex, tc + direction *  1.0) * 0.1945945946;
+    c += Texel(tex, tc + direction *  2.0) * 0.1216216216;
+    c += Texel(tex, tc + direction *  3.0) * 0.0540540541;
+    c += Texel(tex, tc + direction *  4.0) * 0.0162162162;
+    return c * color;
+}
+]]
+
+-- ── Module state ──────────────────────────────────────────────────────────────
+local canvas_bright, canvas_blur_a, canvas_blur_b
+local shader_threshold, shader_blur
+local hw, hh   -- half logical resolution
+
+-- ── Public API ────────────────────────────────────────────────────────────────
+
+function Bloom.load(w, h)
+    hw = math.floor(w / 2)
+    hh = math.floor(h / 2)
+
+    canvas_bright = love.graphics.newCanvas(hw, hh)
+    canvas_blur_a = love.graphics.newCanvas(hw, hh)
+    canvas_blur_b = love.graphics.newCanvas(hw, hh)
+
+    for _, c in ipairs({canvas_bright, canvas_blur_a, canvas_blur_b}) do
+        c:setFilter("linear", "linear")
+    end
+
+    shader_threshold = love.graphics.newShader(SRC_THRESHOLD)
+    shader_threshold:send("threshold", THRESHOLD)
+
+    shader_blur = love.graphics.newShader(SRC_BLUR)
+end
+
+-- Run the bloom pipeline.  Call once per frame after rendering to `source`.
+-- Leaves canvas and shader state reset (no canvas set, no shader active).
+function Bloom.apply(source)
+    local sw, sh = source:getDimensions()
+
+    -- 1. Threshold + downsample → canvas_bright (half-res)
+    love.graphics.setCanvas(canvas_bright)
+    love.graphics.clear(0, 0, 0, 1)
+    love.graphics.setShader(shader_threshold)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(source, 0, 0, 0, hw / sw, hh / sh)
+
+    -- 2. Ping-pong blur: canvas_bright → blur_a (H) → blur_b (V), repeat
+    love.graphics.setShader(shader_blur)
+    local ping = canvas_bright
+    for _ = 1, BLUR_PASSES do
+        love.graphics.setCanvas(canvas_blur_a)
+        love.graphics.clear(0, 0, 0, 1)
+        shader_blur:send("direction", {1 / hw, 0})
+        love.graphics.draw(ping)
+
+        love.graphics.setCanvas(canvas_blur_b)
+        love.graphics.clear(0, 0, 0, 1)
+        shader_blur:send("direction", {0, 1 / hh})
+        love.graphics.draw(canvas_blur_a)
+
+        ping = canvas_blur_b
+    end
+
+    love.graphics.setShader()
+    love.graphics.setCanvas()
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+-- Composite the bloom result additively.
+-- x, y, sx, sy must match the transform used to draw the game canvas to screen.
+function Bloom.draw(x, y, sx, sy)
+    -- canvas_blur_b is half logical size, so scale *2 to match game canvas footprint.
+    love.graphics.setBlendMode("add")
+    love.graphics.setColor(BLOOM_MIX, BLOOM_MIX, BLOOM_MIX, 1)
+    love.graphics.draw(canvas_blur_b, x, y, 0, sx * 2, sy * 2)
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
+return Bloom
+local C = {}
+
+-- Screen (logical)
+C.W = 1280
+C.H = 720
+
+-- Perspective geometry
+C.HORIZON_Y      = 0
+C.ROAD_HALF_BOT  = C.W * 0.50
+C.ROAD_HALF_TOP  = C.W * 0.004
+
+-- Steering
+C.CAM_X_MAX      = C.W * 0.50
+C.CAM_STEER_SPD  = 1.5
+C.CAM_RETURN_SPD = 2.0
+
+-- Lanes
+C.NUM_OBJ_LANES  = 5
+
+-- Gameplay
+C.INITIAL_SPEED      = 6.0
+C.SPEED_INCREMENT    = 0.55
+C.OBSTACLE_INTERVAL  = 2.0
+C.COIN_INTERVAL      = 2.5
+
+-- Object z-lifecycle
+C.OBJ_SPAWN_Z = 0.98
+C.OBJ_HIT_Z   = 0.03
+C.OBJ_CULL_Z  = -0.02
+
+-- Player hitbox (screen-space, fixed position)
+C.HITBOX_HALF     = 36
+C.HITBOX_Y        = C.H - 10 - C.HITBOX_HALF * 2
+C.HITBOX_CX       = C.W / 2
+C.HITBOX_COLLIDE_PX = C.HITBOX_HALF
+
+-- Colours (r,g,b in 0-1 range for Love2D)
+local function rgb(r,g,b) return r/255, g/255, b/255 end
+
+C.COL = {
+    BG          = {rgb(  2,   0,  10)},
+    ROAD        = {rgb(  5,   3,  16)},
+    CYAN        = {rgb(  0, 255, 255)},
+    CYAN2       = {rgb(  0, 180, 210)},
+    PINK        = {rgb(255,   0, 180)},
+    YELLOW      = {rgb(255, 230,   0)},
+    GREEN       = {rgb(  0, 255,  80)},
+    GREEN2      = {rgb( 40, 255, 120)},
+    PURPLE      = {rgb(160,   0, 255)},
+    PURPLE2     = {rgb(200,  60, 255)},
+    ORANGE      = {rgb(255,  80,   0)},
+    WHITE       = {rgb(230, 220, 255)},
+    RED         = {rgb(255,  10,  60)},
+}
+
+C.OBS_COLORS = { C.COL.PINK, C.COL.ORANGE, C.COL.RED }
+
+-- Road grid
+C.STRIPE_Z_STEP = 0.27
+C.NUM_ROAD_SEGS = 16
+
+return C
+local C = require("game.constants")
+
+local HUD = {}
+
+local font_big, font_small, font_tiny, font_huge
+
+function HUD.load()
+    font_huge  = love.graphics.newFont(88)
+    font_big   = love.graphics.newFont(52)
+    font_small = love.graphics.newFont(26)
+    font_tiny  = love.graphics.newFont(18)
+end
+
+local function setCol(t, a)
+    love.graphics.setColor(t[1], t[2], t[3], a or 1)
+end
+
+function HUD.draw(score, speed, combo, gt)
+    -- Score — top left
+    local sc_str = tostring(math.floor(score))
+    sc_str = sc_str:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+
+    love.graphics.setFont(font_big)
+    love.graphics.setColor(0, 0.22, 0.08, 1)
+    love.graphics.print(sc_str, 31, 15)
+    setCol(C.COL.GREEN)
+    love.graphics.print(sc_str, 28, 12)
+
+    -- Speed — top right
+    local kmh = tostring(math.floor(speed * 22))
+    love.graphics.setFont(font_tiny)
+    love.graphics.setColor(0.35, 0.24, 0.59, 1)
+    love.graphics.print("KM/H", C.W - 215, 14)
+    love.graphics.setFont(font_small)
+    setCol(C.COL.PURPLE2)
+    love.graphics.print(kmh, C.W - 215, 38)
+
+    -- Speed bar
+    local bar_max = 330
+    local bar_w   = math.floor(bar_max * math.min(1, speed / 16))
+    love.graphics.setColor(0.07, 0.03, 0.15, 1)
+    love.graphics.rectangle("fill", C.W - 215, 78, bar_max, 13, 4)
+    if bar_w > 0 then
+        setCol(C.COL.PURPLE2)
+        love.graphics.rectangle("fill", C.W - 215, 78, bar_w, 13, 4)
+    end
+
+    -- Combo
+    if combo > 1 then
+        local t  = math.min(combo, 8) / 8
+        local g  = C.COL.GREEN
+        local y2 = C.COL.YELLOW
+        love.graphics.setColor(
+            y2[1]*t + g[1]*(1-t),
+            y2[2]*t + g[2]*(1-t),
+            y2[3]*t + g[3]*(1-t), 1)
+        love.graphics.setFont(font_small)
+        love.graphics.print("x"..combo.."  COMBO", 28, 95)
+    end
+
+    -- Player hitbox square
+    local hx  = C.HITBOX_CX
+    local sq  = C.HITBOX_HALF
+    local sqy = C.HITBOX_Y
+    local cy_col = C.COL.CYAN
+    for i = 4, 1, -1 do
+        local inf   = i * 5
+        local alpha = 0.35 * i / 4
+        love.graphics.setColor(cy_col[1]*i/4, cy_col[2]*i/4, cy_col[3]*i/4, alpha)
+        love.graphics.setLineWidth(4)
+        love.graphics.rectangle("line",
+            hx - sq - inf, sqy - inf, sq*2 + inf*2, sq*2 + inf*2, 4)
+    end
+    setCol(C.COL.CYAN)
+    love.graphics.rectangle("fill", hx - sq, sqy, sq*2, sq*2, 4)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setLineWidth(4)
+    love.graphics.line(hx - 6, sqy + sq, hx + 6, sqy + sq)
+    love.graphics.line(hx, sqy + sq - 6, hx, sqy + sq + 6)
+    love.graphics.setLineWidth(1)
+end
+
+function HUD.drawGameOver(score, gt)
+    love.graphics.setColor(0, 0, 0, 0.82)
+    love.graphics.rectangle("fill", 0, 0, C.W, C.H)
+
+    local cx = C.W / 2
+    local cy = C.H / 2
+
+    local flk = 0.80 + 0.20 * math.sin(gt * 24)
+    local pk  = C.COL.PINK
+    love.graphics.setFont(font_huge)
+    love.graphics.setColor(0.31, 0, 0.18, 1)
+    for _, d in ipairs({{-4,-4},{4,4},{-4,4},{4,-4}}) do
+        love.graphics.printf("GAME  OVER", cx - 400 + d[1], cy - 175 + d[2], 800, "center")
+    end
+    love.graphics.setColor(pk[1]*flk, pk[2]*flk, pk[3]*flk, 1)
+    love.graphics.printf("GAME  OVER", cx - 400, cy - 175, 800, "center")
+
+    local sc_str = tostring(math.floor(score))
+    sc_str = sc_str:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+    love.graphics.setFont(font_big)
+    setCol(C.COL.GREEN)
+    love.graphics.printf("SCORE   "..sc_str, cx - 400, cy - 20, 800, "center")
+
+    love.graphics.setFont(font_small)
+    love.graphics.setColor(0.47, 0.31, 0.75, 1)
+    love.graphics.printf(
+        "BOTH BRAKES or SPACE  ·  restart          ESC  ·  quit",
+        cx - 450, cy + 82, 900, "center")
+
+    for i = 0, 4 do
+        local a = math.max(0, 85 - i*16) / 85
+        love.graphics.setColor(pk[1]*a, pk[2]*a, pk[3]*a, 1)
+        love.graphics.setLineWidth(4)
+        love.graphics.line(0, cy - 235 + i*3, C.W, cy - 235 + i*3)
+        love.graphics.line(0, cy + 148 - i*3, C.W, cy + 148 - i*3)
+    end
+    love.graphics.setLineWidth(1)
+end
+
+return HUD
+local C    = require("game.constants")
+local Road = require("game.road")
+
+local Objects = {}
+
+-- Discrete size tables (mirrors pygame OBS_SIZES / COIN_SIZES)
+local OBS_SIZES  = {4,8,12,16,22,28,36,46,58,72,88,104,120}
+local COIN_SIZES = {3,5,7,10,14,18,22,28,34}
+
+local function nearest(val, lst)
+    local best, bd = lst[1], math.huge
+    for _, v in ipairs(lst) do
+        local d = math.abs(v - val)
+        if d < bd then best, bd = v, d end
+    end
+    return best
+end
+
+local function randcol(t) return t[love.math.random(#t)] end
+
+-- ── Glow helpers (CPU, no shader yet) ─────────────────────────────────────────
+-- Draws concentric transparent rects/circles to fake a glow halo.
+
+local function drawRectGlow(col, x, y, w, h, passes, spread)
+    passes = passes or 4
+    spread = spread or 6
+    for i = passes, 1, -1 do
+        local inf   = i * spread
+        local alpha = 0.55 * (i / passes)^1.5
+        love.graphics.setColor(col[1], col[2], col[3], alpha)
+        love.graphics.rectangle("fill",
+            x - w/2 - inf, y - h - inf, w + inf*2, h + inf*2, math.max(2, w*0.12))
+    end
+    love.graphics.setColor(col[1], col[2], col[3], 1)
+    love.graphics.rectangle("fill", x - w/2, y - h, w, h, math.max(2, w*0.12))
+    -- bright centre
+    love.graphics.setColor(
+        math.min(1, col[1]+0.5),
+        math.min(1, col[2]+0.5),
+        math.min(1, col[3]+0.5), 0.9)
+    love.graphics.rectangle("fill",
+        x - w/2 + w/5, y - h + h/5, w*3/5, h*3/5, 2)
+end
+
+local function drawCircleGlow(col, cx, cy, r, passes, spread)
+    passes = passes or 4
+    spread = spread or 5
+    for i = passes, 1, -1 do
+        local gr    = r + i * spread
+        local alpha = 0.82 * (i / passes)^1.6
+        love.graphics.setColor(col[1], col[2], col[3], alpha)
+        love.graphics.circle("fill", cx, cy, gr)
+    end
+    love.graphics.setColor(col[1], col[2], col[3], 1)
+    love.graphics.circle("fill", cx, cy, r)
+    love.graphics.setColor(
+        math.min(1, col[1]+0.55),
+        math.min(1, col[2]+0.55),
+        math.min(1, col[3]+0.55), 1)
+    love.graphics.circle("fill", cx, cy, math.max(1, r/3))
+end
+
+-- ── RoadObject ────────────────────────────────────────────────────────────────
+
+local RoadObject = {}
+RoadObject.__index = RoadObject
+
+function RoadObject.new(speed, kind)
+    local self = setmetatable({}, RoadObject)
+    self.lane  = love.math.random(0, C.NUM_OBJ_LANES - 1)
+    self.z     = C.OBJ_SPAWN_Z
+    self.speed = speed
+    self.kind  = kind
+    self.pulse = love.math.random() * math.pi * 2
+    self.color = (kind == 'obstacle') and randcol(C.OBS_COLORS) or C.COL.YELLOW
+    return self
+end
+
+function RoadObject:laneFrac()
+    return (self.lane / (C.NUM_OBJ_LANES - 1)) - 0.5
+end
+
+function RoadObject:update(dt)
+    self.z     = self.z - self.speed * (1.0 - self.z + 0.08) * dt
+    self.pulse = self.pulse + dt * 5.0
+end
+
+function RoadObject:isHit(cam_x)
+    if self.z >= C.OBJ_HIT_Z then return false end
+    local half_w   = C.ROAD_HALF_BOT + (C.ROAD_HALF_TOP - C.ROAD_HALF_BOT) * self.z
+    local center_x = C.W / 2 + cam_x * (1.0 - self.z)
+    local obj_sx   = center_x + self:laneFrac() * half_w * 2
+    return math.abs(obj_sx - C.HITBOX_CX) < C.HITBOX_COLLIDE_PX
+end
+
+function RoadObject:offScreen()
+    return self.z < C.OBJ_CULL_Z
+end
+
+function RoadObject:draw(cam_x)
+    if self.z <= 0.005 then return end
+    local sx, sy, scale = Road.project(self:laneFrac(), self.z, cam_x)
+    if scale < 0.015 then return end
+
+    local pulse = 0.78 + 0.22 * math.sin(self.pulse)
+    local col   = {self.color[1]*pulse, self.color[2]*pulse, self.color[3]*pulse}
+
+    if self.kind == 'obstacle' then
+        local pw = nearest(math.floor(110 * scale), OBS_SIZES)
+        local ph = nearest(math.floor(155 * scale), OBS_SIZES)
+        if pw < 4 or ph < 4 then return end
+
+        drawRectGlow(col, sx, sy, pw, ph)
+
+        -- Windshield cutout
+        if pw > 18 then
+            love.graphics.setColor(C.COL.BG[1], C.COL.BG[2], C.COL.BG[3], 1)
+            love.graphics.rectangle("fill",
+                sx - pw/2 + pw/5, sy - ph + ph/8, pw*3/5, ph/3, 2)
+            love.graphics.setColor(col[1], col[2], col[3], 1)
+            love.graphics.setLineWidth(math.max(1, 4*scale))
+            love.graphics.rectangle("line",
+                sx - pw/2 + pw/5, sy - ph + ph/8, pw*3/5, ph/3, 2)
+        end
+
+        -- Headlights
+        if pw > 12 then
+            local hl_r = math.max(2, math.floor(5*scale))
+            local yl   = {1, 0.86, 0.39}
+            drawCircleGlow(yl, sx - pw/2 + hl_r + 2, sy - hl_r - 2, hl_r, 3, 4)
+            drawCircleGlow(yl, sx + pw/2 - hl_r - 2, sy - hl_r - 2, hl_r, 3, 4)
+        end
+
+    else  -- coin
+        local cr = nearest(math.floor(32 * scale), COIN_SIZES)
+        if cr < 3 then return end
+
+        drawCircleGlow(col, sx, sy, cr)
+
+        -- Spinning ellipse overlay
+        local spin_w = math.max(1, math.floor(cr * 2 * math.abs(math.sin(self.pulse))))
+        if spin_w > 4 then
+            love.graphics.setColor(0.67, 0.51, 0, 1)
+            love.graphics.setLineWidth(math.max(1, math.floor(6*scale)))
+            love.graphics.ellipse("line", sx, sy, spin_w/2, cr)
+        end
+    end
+end
+
+-- ── Module-level spawn helpers ────────────────────────────────────────────────
+
+function Objects.newObstacle(speed) return RoadObject.new(speed, 'obstacle') end
+function Objects.newCoin(speed)     return RoadObject.new(speed, 'coin')     end
+
+return Objects
+local C = require("game.constants")
+
+local Road = {}
+
+-- Project (lane_frac, z) → screen (sx, sy, scale)
+-- lane_frac: -0.5 (left edge) … +0.5 (right edge)
+-- z: 0 (near) … 1 (horizon)
+function Road.project(lane_frac, z, cam_x)
+    local half_w   = C.ROAD_HALF_BOT + (C.ROAD_HALF_TOP - C.ROAD_HALF_BOT) * z
+    local screen_y = C.HORIZON_Y + (C.H - C.HORIZON_Y) * (1.0 - z)
+    local center_x = C.W / 2 + cam_x * (1.0 - z)
+    local screen_x = center_x + lane_frac * half_w * 2
+    local scale    = math.max(0, 1.0 - z)
+    return screen_x, screen_y, scale
+end
+
+local function ex(frac, z, cam_x)
+    return Road.project(frac, z, cam_x)
+end
+
+function Road.draw(cam_x, road_offset)
+    local p  = C.COL.PURPLE
+    local ro = C.COL.ROAD
+
+    -- Road fill
+    love.graphics.setColor(ro[1], ro[2], ro[3], 1)
+    local lx0 = ex(-0.5, 0.999, cam_x)
+    local rx0 = ex( 0.5, 0.999, cam_x)
+    local lx1 = ex(-0.5, 0.001, cam_x)
+    local rx1 = ex( 0.5, 0.001, cam_x)
+    love.graphics.polygon("fill", lx0, C.HORIZON_Y, rx0, C.HORIZON_Y, rx1, C.H, lx1, C.H)
+
+    -- Horizontal grid lines
+    local z_off = (-road_offset * 0.005) % C.STRIPE_Z_STEP
+    local z = z_off
+    while z < 0.97 do
+        local lx = ex(-0.5, z, cam_x)
+        local rx = ex( 0.5, z, cam_x)
+        local sy = C.HORIZON_Y + (C.H - C.HORIZON_Y) * (1.0 - z)
+        local brightness = 120 * (1 - z)^1.5
+        if brightness > 3 then
+            local t = brightness / 120
+            love.graphics.setColor(p[1]*t, p[2]*t, p[3]*t)
+            love.graphics.setLineWidth(math.max(1, 12 * (1 - z)))
+            love.graphics.line(lx, sy, rx, sy)
+        end
+        z = z + C.STRIPE_Z_STEP
+    end
+
+    -- Lane dashes
+    for lane = 1, C.NUM_OBJ_LANES - 1 do
+        local frac = (lane / C.NUM_OBJ_LANES) - 0.5
+        local prev_x, prev_y
+        for si = 0, C.NUM_ROAD_SEGS do
+            local z2 = si / C.NUM_ROAD_SEGS
+            local sx2 = ex(frac, z2, cam_x)
+            local sy2 = C.HORIZON_Y + (C.H - C.HORIZON_Y) * (1.0 - z2)
+            if prev_x and si % 2 == 0 then
+                local t = (1 - z2)
+                love.graphics.setColor(p[1]*t, p[2]*t, p[3]*t)
+                love.graphics.setLineWidth(math.max(1, 7 * (1 - z2)))
+                love.graphics.line(prev_x, prev_y, sx2, sy2)
+            end
+            prev_x, prev_y = sx2, sy2
+        end
+    end
+
+    -- Road edges (neon cyan)
+    for _, side in ipairs({-0.5, 0.5}) do
+        local prev_x, prev_y
+        for si = 0, C.NUM_ROAD_SEGS do
+            local z2  = si / C.NUM_ROAD_SEGS
+            local sx2 = ex(side, z2, cam_x)
+            local sy2 = C.HORIZON_Y + (C.H - C.HORIZON_Y) * (1.0 - z2)
+            if prev_x then
+                local bright = (1 - z2)
+                love.graphics.setColor(0, bright, bright)
+                love.graphics.setLineWidth(math.max(2, 18 * (1 - z2)))
+                love.graphics.line(prev_x, prev_y, sx2, sy2)
+            end
+            prev_x, prev_y = sx2, sy2
+        end
+    end
+
+    love.graphics.setLineWidth(1)
+end
+
+return Road
+local Sparks = {}
+
+local SPARK_COLORS = {
+    {1, 0.90, 0},        -- yellow
+    {0.16, 1, 0.47},     -- green2
+    {1, 1, 0.71},        -- warm white
+}
+
+local Spark = {}
+Spark.__index = Spark
+
+function Spark.new(x, y)
+    local s    = setmetatable({}, Spark)
+    local a    = love.math.random() * math.pi * 2
+    local sp   = love.math.random(120, 440)
+    s.x, s.y   = x, y
+    s.vx, s.vy = math.cos(a)*sp, math.sin(a)*sp
+    s.life     = love.math.random() * 0.45 + 0.3
+    s.max_life = s.life
+    s.color    = SPARK_COLORS[love.math.random(#SPARK_COLORS)]
+    return s
+end
+
+function Spark:update(dt)
+    self.x    = self.x + self.vx * dt
+    self.y    = self.y + self.vy * dt
+    self.vy   = self.vy + 270 * dt
+    self.life = self.life - dt
+    return self.life > 0
+end
+
+function Spark:draw()
+    local a = self.life / self.max_life
+    local r = math.max(1, 5 * a)
+    local c = self.color
+    love.graphics.setColor(c[1]*a, c[2]*a, c[3]*a, a)
+    love.graphics.circle("fill", self.x, self.y, r)
+end
+
+-- Burst: spawn n sparks at (x, y), append to list
+function Sparks.burst(list, x, y, n)
+    for _ = 1, (n or 22) do
+        list[#list+1] = Spark.new(x, y)
+    end
+end
+
+-- Update all sparks in-place, remove dead ones. Returns same list.
+function Sparks.update(list, dt)
+    local i = 1
+    while i <= #list do
+        if list[i]:update(dt) then
+            i = i + 1
+        else
+            list[i] = list[#list]
+            list[#list] = nil
+        end
+    end
+end
+
+function Sparks.draw(list)
+    for _, sp in ipairs(list) do
+        sp:draw()
+    end
+end
+
+return Sparks
+local C = require("game.constants")
+
+local State = {}
+
+function State.new()
+    return {
+        objects     = {},
+        sparks      = {},
+        score       = 0,
+        speed       = C.INITIAL_SPEED,
+        obs_timer   = 0,
+        coin_timer  = 0,
+        speed_timer = 0,
+        road_offset = 0,
+        alive       = true,
+        combo       = 0,
+        combo_timer = 0,
+        cam_x       = 0,
+        gt          = 0,   -- global time (seconds since game start)
+    }
+end
+
+return State
+-- Keyboard input + both-brakes edge detection.
+-- LEFT brake  → left arrow
+-- RIGHT brake → right arrow
+-- Restart     → SPACE (any state) or LEFT+RIGHT simultaneously (game-over only, edge-triggered)
+
+local Input = {}
+
+local both_prev = false
+
+function Input.reset()
+    both_prev = false
+end
+
+-- Returns: steer (-1 left, +1 right, 0 none), restart_triggered (bool)
+function Input.poll(alive)
+    local left  = love.keyboard.isDown("left")
+    local right = love.keyboard.isDown("right")
+
+    local steer = 0
+    if left  then steer = steer + 1 end   -- left brake → steer left (cam_x positive)
+    if right then steer = steer - 1 end   -- right brake → steer right
+
+    local both_now = left and right
+    local restart  = false
+    if not alive then
+        -- edge-triggered: only fires on the frame both go from not-both to both
+        if both_now and not both_prev then
+            restart = true
+        end
+    end
+    both_prev = both_now
+
+    return steer, restart
+end
+
+return Input
+-- ── Config flags (edit here for deployment) ───────────────────────────────────
+local FULLSCREEN = false   -- set true for 1080p installation mode
+local RES_W      = 1920    -- used only when FULLSCREEN = true
+local RES_H      = 1080
+
+-- ── Requires ──────────────────────────────────────────────────────────────────
+local C       = require("game.constants")
+local State   = require("game.state")
+local Road    = require("game.road")
+local Objects = require("game.objects")
+local Sparks  = require("game.sparks")
+local HUD     = require("game.hud")
+local Bloom   = require("game.bloom")
+local Input   = require("input")
+
+-- ── Globals ───────────────────────────────────────────────────────────────────
+local s           -- current game state
+local scale_x, scale_y, offset_x, offset_y  -- logical→physical transform
+local canvas      -- off-screen canvas at logical resolution
+
+-- ── Love callbacks ────────────────────────────────────────────────────────────
+
+function love.load()
+    if FULLSCREEN then
+        love.window.setMode(RES_W, RES_H, {fullscreen=true, vsync=1})
+    end
+
+    -- Logical canvas always renders at C.W × C.H; scaled to window at draw time.
+    canvas = love.graphics.newCanvas(C.W, C.H)
+
+    -- Compute scale + letterbox offsets
+    local pw, ph = love.graphics.getDimensions()
+    scale_x  = pw / C.W
+    scale_y  = ph / C.H
+    local sc = math.min(scale_x, scale_y)
+    scale_x, scale_y = sc, sc
+    offset_x = (pw - C.W * sc) / 2
+    offset_y = (ph - C.H * sc) / 2
+
+    HUD.load()
+    Bloom.load(C.W, C.H)
+
+    s = State.new()
+    Input.reset()
+
+    love.graphics.setLineStyle("rough")  -- crisp lines, better for neon look
+end
+
+function love.update(dt)
+    dt = math.min(dt, 0.05)   -- cap to avoid spiral-of-death after focus loss
+    s.gt = s.gt + dt
+
+    local steer, restart = Input.poll(s.alive)
+
+    if restart then
+        s = State.new()
+        Input.reset()
+        return
+    end
+
+    if not s.alive then return end
+
+    -- Steering — hold position when no key is pressed
+    if steer ~= 0 then
+        s.cam_x = s.cam_x + steer * C.CAM_STEER_SPD * C.CAM_X_MAX * dt
+        s.cam_x = math.max(-C.CAM_X_MAX, math.min(C.CAM_X_MAX, s.cam_x))
+    end
+
+    -- Road scroll & speed ramp
+    s.road_offset = s.road_offset + s.speed * dt * 60
+    s.speed_timer = s.speed_timer + dt
+    if s.speed_timer >= 10 then
+        s.speed_timer = 0
+        s.speed       = s.speed + C.SPEED_INCREMENT
+    end
+
+    -- Score ticks up while alive
+    s.score = s.score + s.speed * dt * 3
+
+    -- Combo decay
+    s.combo_timer = s.combo_timer + dt
+    if s.combo_timer > 3 then s.combo = 0 end
+
+    -- Spawn objects
+    s.obs_timer = s.obs_timer + dt
+    if s.obs_timer >= C.OBSTACLE_INTERVAL then
+        s.obs_timer = 0
+        s.objects[#s.objects+1] = Objects.newObstacle(s.speed * 0.026)
+    end
+    s.coin_timer = s.coin_timer + dt
+    if s.coin_timer >= C.COIN_INTERVAL then
+        s.coin_timer = 0
+        s.objects[#s.objects+1] = Objects.newCoin(s.speed * 0.026)
+    end
+
+    -- Update objects; detect collisions
+    local i = 1
+    while i <= #s.objects do
+        local obj = s.objects[i]
+        obj:update(dt)
+
+        if obj:offScreen() then
+            s.objects[i] = s.objects[#s.objects]
+            s.objects[#s.objects] = nil
+
+        elseif obj:isHit(s.cam_x) then
+            if obj.kind == 'obstacle' then
+                s.alive = false
+                i = i + 1   -- leave in list so it draws on game-over frame
+            else
+                local ox, oy = Road.project(obj:laneFrac(), obj.z, s.cam_x)
+                s.objects[i] = s.objects[#s.objects]
+                s.objects[#s.objects] = nil
+                s.combo       = s.combo + 1
+                s.combo_timer = 0
+                s.score       = s.score + 100 * math.max(1, s.combo)
+                Sparks.burst(s.sparks, ox, oy, 22)
+            end
+        else
+            i = i + 1
+        end
+    end
+
+    Sparks.update(s.sparks, dt)
+end
+
+function love.draw()
+    -- Render game at logical resolution into canvas
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(C.COL.BG[1], C.COL.BG[2], C.COL.BG[3], 1)
+
+    Road.draw(s.cam_x, s.road_offset)
+
+    -- Draw objects back-to-front (highest z first = furthest away)
+    table.sort(s.objects, function(a, b) return a.z > b.z end)
+    for _, obj in ipairs(s.objects) do
+        obj:draw(s.cam_x)
+    end
+
+    Sparks.draw(s.sparks)
+
+    HUD.draw(s.score, s.speed, s.combo, s.gt)
+
+    if not s.alive then
+        HUD.drawGameOver(s.score, s.gt)
+    end
+
+    -- Bloom pass (threshold → half-res Gaussian blur, stored internally)
+    love.graphics.setCanvas()
+    Bloom.apply(canvas)
+
+    -- Blit game canvas to window (letterboxed / scaled)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(canvas, offset_x, offset_y, 0, scale_x, scale_y)
+
+    -- Additive bloom overlay on top
+    Bloom.draw(offset_x, offset_y, scale_x, scale_y)
+end
+
+function love.keypressed(key)
+    if key == "escape" then
+        love.event.quit()
+    end
+    if key == "space" and not s.alive then
+        s = State.new()
+        Input.reset()
+    end
+end

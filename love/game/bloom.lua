@@ -9,7 +9,7 @@ local BLOOM_MIX   = 1.0    -- additive strength of the bloom overlay
 local BLUR_PASSES = 4      -- more passes = wider, softer halo
 
 -- ── Shader sources ────────────────────────────────────────────────────────────
-
+s
 -- Extract pixels above the luminance threshold (soft roll-off, not hard clip).
 local SRC_THRESHOLD = [[
 extern float threshold;

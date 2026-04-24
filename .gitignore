@@ -20,3 +20,10 @@ build/
 .vscode/
 *.swp
 *.swo
+
+# Node (love.js build tool)
+node_modules/
+package-lock.json
+
+# GitHub Pages build output is intentionally committed under docs/
+# (love.js generates docs/game/ — do not add docs/ here)
