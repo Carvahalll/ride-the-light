@@ -56,7 +56,7 @@ C.COL = {
 C.OBS_COLORS = { C.COL.PINK, C.COL.ORANGE, C.COL.RED }
 
 -- Road grid
-C.STRIPE_Z_STEP = 0.09
+C.STRIPE_Z_STEP = 0.27
 C.NUM_ROAD_SEGS = 16
 
 return C

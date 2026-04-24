@@ -58,19 +58,10 @@ function love.update(dt)
 
     if not s.alive then return end
 
-    -- Steering
+    -- Steering — hold position when no key is pressed
     if steer ~= 0 then
         s.cam_x = s.cam_x + steer * C.CAM_STEER_SPD * C.CAM_X_MAX * dt
         s.cam_x = math.max(-C.CAM_X_MAX, math.min(C.CAM_X_MAX, s.cam_x))
-    else
-        -- drift back to centre
-        local dir = (s.cam_x > 0) and -1 or 1
-        local step = C.CAM_RETURN_SPD * C.CAM_X_MAX * dt
-        if math.abs(s.cam_x) <= step then
-            s.cam_x = 0
-        else
-            s.cam_x = s.cam_x + dir * step
-        end
     end
 
     -- Road scroll & speed ramp

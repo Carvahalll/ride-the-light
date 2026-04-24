@@ -31,17 +31,17 @@ function Road.draw(cam_x, road_offset)
     love.graphics.polygon("fill", lx0, C.HORIZON_Y, rx0, C.HORIZON_Y, rx1, C.H, lx1, C.H)
 
     -- Horizontal grid lines
-    local z_off = (road_offset * 0.005) % C.STRIPE_Z_STEP
+    local z_off = (-road_offset * 0.005) % C.STRIPE_Z_STEP
     local z = z_off
     while z < 0.97 do
         local lx = ex(-0.5, z, cam_x)
         local rx = ex( 0.5, z, cam_x)
         local sy = C.HORIZON_Y + (C.H - C.HORIZON_Y) * (1.0 - z)
-        local brightness = 55 * (1 - z)^2
+        local brightness = 120 * (1 - z)^1.5
         if brightness > 3 then
-            local t = brightness / 55
+            local t = brightness / 120
             love.graphics.setColor(p[1]*t, p[2]*t, p[3]*t)
-            love.graphics.setLineWidth(math.max(1, 6 * (1 - z)))
+            love.graphics.setLineWidth(math.max(1, 12 * (1 - z)))
             love.graphics.line(lx, sy, rx, sy)
         end
         z = z + C.STRIPE_Z_STEP
@@ -56,10 +56,9 @@ function Road.draw(cam_x, road_offset)
             local sx2 = ex(frac, z2, cam_x)
             local sy2 = C.HORIZON_Y + (C.H - C.HORIZON_Y) * (1.0 - z2)
             if prev_x and si % 2 == 0 then
-                local bright = 140 * (1 - z2)
-                local t = bright / 140
+                local t = (1 - z2)
                 love.graphics.setColor(p[1]*t, p[2]*t, p[3]*t)
-                love.graphics.setLineWidth(math.max(1, 4 * (1 - z2)))
+                love.graphics.setLineWidth(math.max(1, 7 * (1 - z2)))
                 love.graphics.line(prev_x, prev_y, sx2, sy2)
             end
             prev_x, prev_y = sx2, sy2
@@ -76,7 +75,7 @@ function Road.draw(cam_x, road_offset)
             if prev_x then
                 local bright = (1 - z2)
                 love.graphics.setColor(0, bright, bright)
-                love.graphics.setLineWidth(math.max(1, 10 * (1 - z2)))
+                love.graphics.setLineWidth(math.max(2, 18 * (1 - z2)))
                 love.graphics.line(prev_x, prev_y, sx2, sy2)
             end
             prev_x, prev_y = sx2, sy2
