@@ -127,6 +127,51 @@
     }
 
     /* ══════════════════════════════════════════════════════════════
+       VIDEO SECTION
+    ══════════════════════════════════════════════════════════════ */
+    .video-section {
+      padding: 80px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .video-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.35em;
+      color: var(--purple);
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--purple);
+    }
+
+    .video-wrap {
+      position: relative;
+      line-height: 0;
+      max-width: 100%;
+    }
+
+    .video-wrap::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border: 2px solid var(--pink);
+      box-shadow:
+        0 0 14px var(--pink),
+        inset 0 0 14px rgba(255, 0, 180, 0.05);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .demo-video {
+      display: block;
+      max-width: 100%;
+      width: 1280px;
+      height: auto;
+      background: #02000a;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
        GAME EMBED SECTION  (desktop only)
     ══════════════════════════════════════════════════════════════ */
     .game-section {
@@ -246,6 +291,28 @@ Nebenberuflich ist Aurel als Lichttechniker und Musiker in Luzern engagiert.</p>
   </div>  
 
   <p class="scroll-hint">↓ &nbsp; PLAY IN BROWSER &nbsp; ↓</p>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     REAL DEMO VIDEO
+══════════════════════════════════════════════════════════════════ -->
+<section class="video-section">
+
+  <p class="video-label">Real Installation Demo</p>
+
+  <div class="video-wrap">
+    <video
+      class="demo-video"
+      src="real_demo.mp4"
+      autoplay
+      loop
+      muted
+      playsinline
+    ></video>
+  </div>
 
 </section>
 
