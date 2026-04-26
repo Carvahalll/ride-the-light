@@ -100,9 +100,9 @@ end
 
 function Scenery.load()
     for _, path in ipairs(IMAGE_PATHS) do
-        local ok, img = pcall(love.graphics.newImage, path, {mipmaps = true})
+        local ok, img = pcall(love.graphics.newImage, path)
         if ok then
-            img:setFilter("linear", "linear", 16)
+            img:setFilter("linear", "linear")
             images[#images+1] = { img = img, w = img:getWidth(), h = img:getHeight() }
         end
     end
