@@ -100,8 +100,9 @@ end
 
 function Scenery.load()
     for _, path in ipairs(IMAGE_PATHS) do
-        local ok, img = pcall(love.graphics.newImage, path)
+        local ok, img = pcall(love.graphics.newImage, path, {mipmaps = true})
         if ok then
+            img:setFilter("linear", "linear", 16)
             images[#images+1] = { img = img, w = img:getWidth(), h = img:getHeight() }
         end
     end
@@ -145,6 +146,17 @@ function Scenery.draw(cam_x)
             if sc >= 0.01 then
                 local col = item.color
                 love.graphics.setShader(SILHOUETTE_SHADER)
+
+                for i = 3, 1, -1 do
+                    local sc2   = sc * (1.0 + i * 0.04)
+                    local alpha = 0.28 * (i / 3) ^ 1.6
+                    love.graphics.setColor(col[1], col[2], col[3], alpha)
+                    love.graphics.draw(idata.img,
+                        screen_x - idata.w * sc2 / 2,
+                        screen_y - idata.h * sc2,
+                        0, sc2, sc2)
+                end
+
                 love.graphics.setColor(col[1], col[2], col[3], 0.92)
                 love.graphics.draw(idata.img,
                     screen_x - idata.w * sc / 2,

@@ -249,8 +249,11 @@ end
 -- ── Module-level load / spawn helpers ────────────────────────────────────────
 
 function Objects.load()
-    local ok, img = pcall(love.graphics.newImage, "assets/obstacles/swan.png")
-    if ok then swan_img = img end
+    local ok, img = pcall(love.graphics.newImage, "assets/obstacles/swan.png", {mipmaps = true})
+    if ok then
+        img:setFilter("linear", "linear", 16)
+        swan_img = img
+    end
 end
 
 function Objects.newObstacle(speed, active_objects)
