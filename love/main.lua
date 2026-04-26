@@ -185,8 +185,7 @@ function love.keypressed(key)
     end
 end
 
-function love.mousepressed(x, y, button, istouch)
-    if istouch then return end   -- handled by touchpressed
+function love.mousepressed(x, y, button)
     if not s.alive then
         s = State.new(); Input.reset(); Scenery.reset()
         return
@@ -194,19 +193,6 @@ function love.mousepressed(x, y, button, istouch)
     Input.pointerDown(x, love.graphics.getWidth())
 end
 
-function love.mousereleased(x, y, button, istouch)
-    if istouch then return end
-    Input.pointerUp()
-end
-
-function love.touchpressed(id, x, y)
-    if not s.alive then
-        s = State.new(); Input.reset(); Scenery.reset()
-        return
-    end
-    Input.pointerDown(x, love.graphics.getWidth())
-end
-
-function love.touchreleased(id, x, y)
+function love.mousereleased(x, y, button)
     Input.pointerUp()
 end

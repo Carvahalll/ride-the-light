@@ -2,7 +2,7 @@
 -- LEFT brake  → left arrow
 -- RIGHT brake → right arrow
 -- Restart     → SPACE (any state) or LEFT+RIGHT simultaneously (game-over only, edge-triggered)
--- Pointer     → click/hold left half of screen = steer left, right half = steer right
+-- Pointer     → click/hold left half of screen = steer left, right half = steer right (web: mouse only)
 
 local Input = {}
 
@@ -14,12 +14,10 @@ function Input.reset()
     ptr_steer = 0
 end
 
--- Call from love.mousepressed / love.touchpressed
 function Input.pointerDown(x, screen_w)
     ptr_steer = (x < screen_w / 2) and 1 or -1
 end
 
--- Call from love.mousereleased / love.touchreleased
 function Input.pointerUp()
     ptr_steer = 0
 end
