@@ -9,7 +9,7 @@
   NOTE: the rebuild regenerates docs/game/index.html (love.js default — ignored).
   Our custom dark shell lives at docs/game/shell.html and is NOT touched by rebuilds.
 -->
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -117,6 +117,26 @@
     }
     .hero-desc p + p { margin-top: 1em; }
 
+    .hero-desc ul {
+      list-style: none;
+      padding: 0;
+    }
+    .hero-desc ul li::before {
+      content: '— ';
+      color: var(--cyan);
+    }
+    .hero-desc ul li + li { margin-top: 0.4em; }
+
+    /* ── Subsection label (e.g. "Technischer Projektbeschrieb") ── */
+    .sub-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.3em;
+      color: var(--cyan);
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--cyan);
+      margin-top: 1.5rem;
+    }
+
     .scroll-hint {
       margin-top: 4rem;
       font-size: 0.8rem;
@@ -129,6 +149,17 @@
     @keyframes pulse {
       0%, 100% { opacity: 0.3; }
       50%       { opacity: 1;   }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       TEXT SECTION (Über uns, Budget, etc.)
+    ══════════════════════════════════════════════════════════════ */
+    .text-section {
+      padding: 60px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -197,10 +228,9 @@
 
     .game-frame-wrap {
       position: relative;
-      line-height: 0; /* kill inline-block gap */
+      line-height: 0;
     }
 
-    /* Neon border glow around the iframe */
     .game-frame-wrap::before {
       content: '';
       position: absolute;
@@ -229,6 +259,56 @@
     }
 
     /* ══════════════════════════════════════════════════════════════
+       BUDGET TABLE
+    ══════════════════════════════════════════════════════════════ */
+    .budget-table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 660px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95rem;
+    }
+
+    .budget-table th,
+    .budget-table td {
+      padding: 0.6em 1.2em;
+      text-align: left;
+      border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+      vertical-align: top;
+    }
+
+    .budget-table th {
+      color: var(--cyan);
+      text-shadow: 0 0 6px var(--cyan);
+      letter-spacing: 0.2em;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      padding-bottom: 0.8em;
+    }
+
+    .budget-table td:first-child {
+      color: var(--pink);
+      text-shadow: 0 0 4px var(--pink);
+      white-space: nowrap;
+      font-weight: bold;
+    }
+
+    .budget-table tbody tr:last-child td {
+      border-top: 1px solid var(--cyan);
+      box-shadow: 0 -1px 6px var(--cyan);
+      border-bottom: none;
+      margin-top: 0.4em;
+      color: var(--cyan);
+      text-shadow: 0 0 6px var(--cyan);
+      font-weight: bold;
+    }
+
+    .budget-table tbody tr:last-child td:first-child {
+      color: var(--cyan);
+      text-shadow: 0 0 6px var(--cyan);
+    }
+
+    /* ══════════════════════════════════════════════════════════════
        FOOTER
     ══════════════════════════════════════════════════════════════ */
     .site-footer {
@@ -246,8 +326,7 @@
 <body>
 
 <!-- ══════════════════════════════════════════════════════════════════
-     HERO / LANDING SECTION
-     Fill in the TODO blocks below — the rest of the page is done.
+     HERO / LANDING
 ══════════════════════════════════════════════════════════════════ -->
 <section class="hero">
 
@@ -255,60 +334,41 @@
 
   <p class="hero-subtitle glow-pink">Eine interaktive Lichtinstallation auf dem Nextbike</p>
 
-  <img src="Concept_sketch.jpeg" alt="Konzeptskizze" style="max-width:1280px; width:100%; margin: 2rem 0;">
-
   <div class="hero-desc">
-    <p>Fahrradfahren bereitet Freude, ist im Alltag jedoch auch mit Herausforderungen verbunden. Um diese Erfahrung den Besucherinnen und Besuchern des LiLu auf spielerische Weise zu vermitteln, schlagen wir auf dem Inseli eine interaktive Fahrrad-Installation vor.
-Die Installation soll einerseits für das Fahrrad und seine gesundheitlichen Vorteile sensibilisieren, andererseits durch die erzeugte Illusion von Geschwindigkeit überraschen und unterhalten.
-</p>
+    <p>Fahrradfahren bereitet Freude, ist im Alltag jedoch auch mit Herausforderungen verbunden. Um diese Erfahrung den Besucherinnen und Besuchern des LiLu auf spielerische Weise zu vermitteln, schlagen wir auf dem Inseli eine interaktive Fahrrad-Installation vor. Die Installation soll einerseits für das Fahrrad und seine gesundheitlichen Vorteile sensibilisieren, andererseits durch die erzeugte Illusion von Geschwindigkeit überraschen und unterhalten.</p>
     <p>Für Gesundheit und Umwelt. Für eine Velostadt Luzern.</p>
   </div>
 
-
-<!-- ══════════════════════════════════════════════════════════════════
-     REAL DEMO VIDEO
-══════════════════════════════════════════════════════════════════ -->
-<div class="neon-divider"></div>
-<section class="video-section">
-  <p class="hero-subtitle glow-pink">Hardware Prototyp</p>
-
-  <div class="video-wrap">
-    <video
-      class="demo-video"
-      src="real_demo.mp4"
-      autoplay
-      loop
-      muted
-      playsinline
-    ></video>
-  </div>
+  <img src="Concept_sketch.jpeg" alt="Konzeptskizze" style="max-width:1280px; width:100%; margin: 2.5rem 0;">
 
 </section>
 
 <div class="neon-divider"></div>
 
-<section class="About-us"> 
+<!-- ══════════════════════════════════════════════════════════════════
+     ÜBER UNS
+══════════════════════════════════════════════════════════════════ -->
+<section class="text-section">
 
   <p class="hero-subtitle glow-pink">Über uns</p>
 
   <div class="hero-desc">
-    <p>Aurel, Céline und Jonas sind in Luzern aufgewachsen, in Ihrem Alltag haben sie es oft mit Planung und Ausarbeitung von technischen Projekten zu tun. Jonas arbeitet in einem Architekturbüro in Zürich, Aurel bei der ABB in der Innovationsabteilung, Celine als Lichtplanerin.
-Nebenberuflich ist Aurel als Lichttechniker und Musiker in Luzern engagiert.</p>
+    <p>Aurel, Céline und Jonas sind in Luzern aufgewachsen, in ihrem Alltag haben sie es oft mit Planung und Ausarbeitung von technischen Projekten zu tun. Jonas arbeitet in einem Architekturbüro in Zürich, Aurel bei der ABB in der Innovationsabteilung, Celine als Lichtplanerin. Nebenberuflich ist Aurel als Lichttechniker und Musiker in Luzern engagiert.</p>
   </div>
-
 
 </section>
 
 <div class="neon-divider"></div>
 
 <!-- ══════════════════════════════════════════════════════════════════
-     GAME EMBED
+     DAS SPIEL
 ══════════════════════════════════════════════════════════════════ -->
 <section class="game-section">
 
-  <p class="hero-subtitle glow-pink">Spiele die Demo im Browser</p>
-    <div class="hero-desc">
-    <p>Dies ist eine frühe Demo-Version des Spiels welche das Konzept zeigt. Bei erfolgreicher Projekteingabe wird das Spiel noch weiter ausgearbeitet. In dieser Web-Demo, benutze entweder den Touchscreen oder die Pfeiltasten auf deinem Keyboard um das "Fahrrad" an den Hindernissen vorbei zu steuern.</p>
+  <p class="hero-subtitle glow-pink">Das Spiel</p>
+
+  <div class="hero-desc">
+    <p>Dies ist eine frühe Demo-Version des Spiels welche das Konzept zeigt. Bei erfolgreicher Projekteingabe wird das Spiel noch weiter ausgearbeitet. Um das Konzept jetzt schon zu zeigen, hosten wir eine Web-Demo auf unserer Website. Benutze entweder den Touchscreen oder die Pfeiltasten auf dem Keyboard um das "Fahrrad" an den Hindernissen vorbei zu steuern. Im Spiel werden Hindernisse und zu sammelnde Punkte mit bezug auf Luzern auftauchen. Es ist ein "Endlosscroller" bei welchem die Besucher versuchen den Highscore zu knacken.</p>
   </div>
 
   <div class="game-frame-wrap">
@@ -322,12 +382,122 @@ Nebenberuflich ist Aurel als Lichttechniker und Musiker in Luzern engagiert.</p>
   </div>
 
   <p class="game-hint">
-    Click the game to focus &nbsp;·&nbsp;
-    LEFT / RIGHT arrow keys to steer &nbsp;·&nbsp;
-    avoid obstacles &nbsp;·&nbsp;
-    collect coins &nbsp;·&nbsp;
-    SPACE to restart
+    Klicke das Spiel um es zu fokussieren &nbsp;·&nbsp;
+    LINKS / RECHTS Pfeiltasten zum Steuern &nbsp;·&nbsp;
+    Hindernissen ausweichen &nbsp;·&nbsp;
+    Münzen sammeln &nbsp;·&nbsp;
+    LEERTASTE zum Neustart
   </p>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     DER PROTOTYP
+══════════════════════════════════════════════════════════════════ -->
+<section class="video-section">
+
+  <p class="hero-subtitle glow-pink">Der Prototyp</p>
+
+  <div class="hero-desc">
+    <p>An der Installation am Lilu wird das Spiel über ein Fahrrad welches fix montiert ist gesteuert. Über die Bremsen am Lenkrad kann nach links oder rechts gesteuert werden um den Hindernissen auszuweichen. Die Fahrradklingel verscheucht Schwäne von der Strasse und mit den Pedalen kann die Geschwindigkeit beeinflusst werden.</p>
+    <p>Die Steuerung haben wir bereits an unserem Hardware Prototyp erfolgreich getestet.</p>
+  </div>
+
+  <div class="video-wrap">
+    <video
+      class="demo-video"
+      src="real_demo.mp4"
+      autoplay
+      loop
+      muted
+      playsinline
+    ></video>
+  </div>
+
+
+  <p class="hero-subtitle glow-pink">Technischer Projektbeschrieb</p>
+
+  <div class="hero-desc">
+    <p><strong style="color:var(--cyan); letter-spacing:0.1em;">Material</strong></p>
+    <ul>
+      <li>Fahrrad mit Korb (optional ein Nextbike, Kooperation wurde bereits angefragt)</li>
+      <li>Kurzdistanzbeamer</li>
+      <li>Wetterfestes Gehäuse für den Beamer</li>
+      <li>Fahrradrolle um Hinterrad vom Boden abzuheben</li>
+      <li>Optional: LED entlang dem Fahrrad während Stand-By Modus</li>
+      <li>Verlängerungskabel, stolperfallenfrei verlegt bis Stromanschluss</li>
+    </ul>
+
+    <p style="margin-top:1.2em;"><strong style="color:var(--cyan); letter-spacing:0.1em;">Fläche</strong></p>
+    <ul>
+      <li>2 m² für Fahrrad</li>
+      <li>5 m² Projektionsfläche am Boden vor dem Fahrrad</li>
+    </ul>
+
+    <p style="margin-top:1.2em;"><strong style="color:var(--cyan); letter-spacing:0.1em;">Anschlüsse</strong></p>
+    <ul>
+      <li>230 V Stromanschluss</li>
+    </ul>
+
+    <p style="margin-top:1.2em;"><strong style="color:var(--cyan); letter-spacing:0.1em;">Montagezeit und Abbau</strong></p>
+    <p>Fahrrad, Gehäuse, Beamer und Software wird von den Künstlern bereitgestellt. Der Aufbau und Vorbereitung der Konstruktion sollte nicht mehr als 30 Minuten dauern — das Fahrrad kann am Ende des Abends von der Fahrradrolle abmontiert und weggerollt werden. Es bleiben keine permanenten Installationen für den Rest des Tages oder nach dem LiLu bestehen.</p>
+  </div>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PROJEKT BUDGET
+══════════════════════════════════════════════════════════════════ -->
+<section class="text-section">
+
+  <p class="hero-subtitle glow-pink">Projekt Budget</p>
+
+  <div class="hero-desc">
+    <p>Die Kosten für das Projekt sind sehr überschaubar, Hauptpreisträger wird der Projektor sowie das Fahrrad sein. Beim Projektor gibt es vielleicht auch Möglichkeiten das Gerät über die Partner vom Lilu zu fairen Konditionen zu mieten? Beim Fahrrad streben wir eine Kooperation mit Nextbike an.</p>
+  </div>
+
+  <table class="budget-table">
+    <thead>
+      <tr>
+        <th>CHF</th>
+        <th>Beschreibung</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>360</td>
+        <td>(Kurzdistanz) Projektor: Miete oder Gebrauchtkauf (z.B. SAMSUNG Projektor The Freestyle LFF3)</td>
+      </tr>
+      <tr>
+        <td>123</td>
+        <td>Fahrradrolle (z.B. Elite Qubo Fluid oder eigene Konstruktion)</td>
+      </tr>
+      <tr>
+        <td>200</td>
+        <td>Fahrrad: Gebrauchtkauf oder Kooperation mit Nextbike</td>
+      </tr>
+      <tr>
+        <td>100</td>
+        <td>Wetterfestes Gehäuse für Beamer</td>
+      </tr>
+      <tr>
+        <td>100</td>
+        <td>LED Beleuchtung für Fahrrad im Stand-By RGB mit IP65</td>
+      </tr>
+      <tr>
+        <td>40</td>
+        <td>Raspberry Pi (Computer)</td>
+      </tr>
+      <tr>
+        <td>923</td>
+        <td>Gesamtkosten (Schätzung)</td>
+      </tr>
+    </tbody>
+  </table>
 
 </section>
 
